@@ -746,6 +746,9 @@ local lastCaptureTick = 0
 local isCapturing = false
 local captureQueued = false
 
+local armyLastTarget = {}
+local armyLastCommandTick = {}
+
 autoCapture = function()
     if isCapturing then
         captureQueued = true
@@ -795,15 +798,27 @@ autoCapture = function()
                 
                 if targetBase then
                     for _, armyStr in ipairs(settings.Army) do
-                        local success = pcall(function()
-                            GetBridge("SendTroopsToPoint"):Fire({
-                                armyIndex = tonumber(armyStr),
-                                capturePoint = targetBase
-                            })
-                        end)
-                        if success then
-                            sentTroops = true
-                            task.wait(0.2)
+                        local armyNum = tonumber(armyStr)
+                        if armyNum then
+                            local timeSinceLast = tick() - (armyLastCommandTick[armyNum] or 0)
+                            
+                            -- Only send if target changed OR 15 seconds have passed (Anti-Crash/Anti-Spam)
+                            if armyLastTarget[armyNum] ~= targetBase or timeSinceLast > 15 then
+                                armyLastTarget[armyNum] = targetBase
+                                armyLastCommandTick[armyNum] = tick()
+                                
+                                local success = pcall(function()
+                                    GetBridge("SendTroopsToPoint"):Fire({
+                                        armyIndex = armyNum,
+                                        capturePoint = targetBase
+                                    })
+                                end)
+                                
+                                if success then
+                                    sentTroops = true
+                                    task.wait(0.2)
+                                end
+                            end
                         end
                     end
                 end
