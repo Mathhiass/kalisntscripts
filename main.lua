@@ -545,18 +545,20 @@ local function createCaptureUI(tab, displayName, internalName)
         end
     })
     
-    tab:AddDropdown("CaptureTarget_" .. internalName, {
-        Title = "Specific Target",
-        Values = {"1", "2", "3", "4", "5", "6", "Random"},
-        Multi = false,
-        Default = "1",
-        Callback = function(Value)
-            CONFIG.CAPTURE_SETTINGS[internalName].TargetIndex = Value
-            if CONFIG.CAPTURE_SETTINGS[internalName].Enabled and type(autoCapture) == "function" then
-                task.spawn(autoCapture)
+    if internalName ~= "KingOfTheHill" and internalName ~= "City" then
+        tab:AddDropdown("CaptureTarget_" .. internalName, {
+            Title = "Specific Target",
+            Values = {"1", "2", "3", "4", "5", "6", "Random"},
+            Multi = false,
+            Default = "1",
+            Callback = function(Value)
+                CONFIG.CAPTURE_SETTINGS[internalName].TargetIndex = Value
+                if CONFIG.CAPTURE_SETTINGS[internalName].Enabled and type(autoCapture) == "function" then
+                    task.spawn(autoCapture)
+                end
             end
-        end
-    })
+        })
+    end
 end
 
 createCaptureUI(TeleportTab, "Raid Base (King of the Hill)", "KingOfTheHill")
@@ -758,10 +760,12 @@ autoCapture = function()
         -- Normal Bases
         local normalBases = CollectionService:GetTagged("CapturePoint")
         for _, base in ipairs(normalBases) do
-            local bType = base:GetAttribute("baseType")
-            if bType then
-                if not basesByType[bType] then basesByType[bType] = {} end
-                table.insert(basesByType[bType], base)
+            if base:IsDescendantOf(workspace) then
+                local bType = base:GetAttribute("baseType")
+                if bType then
+                    if not basesByType[bType] then basesByType[bType] = {} end
+                    table.insert(basesByType[bType], base)
+                end
             end
         end
         
@@ -769,7 +773,9 @@ autoCapture = function()
         local raidBases = CollectionService:GetTagged("CapturePointKingOfTheHill")
         if not basesByType["KingOfTheHill"] then basesByType["KingOfTheHill"] = {} end
         for _, base in ipairs(raidBases) do
-            table.insert(basesByType["KingOfTheHill"], base)
+            if base:IsDescendantOf(workspace) then
+                table.insert(basesByType["KingOfTheHill"], base)
+            end
         end
         
         for bType, bases in pairs(basesByType) do
@@ -778,7 +784,9 @@ autoCapture = function()
                 table.sort(bases, function(a, b) return a.Name < b.Name end)
                 
                 local targetBase = nil
-                if settings.TargetIndex == "Random" then
+                if bType == "KingOfTheHill" or bType == "City" then
+                    targetBase = bases[1]
+                elseif settings.TargetIndex == "Random" then
                     targetBase = bases[math.random(1, #bases)]
                 else
                     local idx = tonumber(settings.TargetIndex) or 1
