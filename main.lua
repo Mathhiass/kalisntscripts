@@ -200,18 +200,39 @@ local SmartAutoSellToggle = FarmTab:AddToggle("SmartAutoSellToggle", {
    end
 })
 
-FarmTab:AddSlider("AutoSellPercentSlider", {
-   Title = "Smart Auto Sell Min Percentage",
-   Min = -100,
-   Max = 100,
-   Default = 0,
-   Rounding = 0,
-   Callback = function(Value)
+local AutoSellSlider = FarmTab:AddSlider("AutoSellPercentSlider", {
+    Title = "Smart Auto Sell Min Percentage",
+    Min = -100,
+    Max = 100,
+    Default = 0,
+    Rounding = 0,
+    Callback = function(Value)
         pcall(function()
             local absoluteValue = Value + 100
             GetBridge("SetAutoSellMinPercent"):Fire(absoluteValue)
         end)
-   end
+    end
+})
+
+-- Mobile-friendly input (Textbox) for direct percentage entry
+FarmTab:AddTextbox("AutoSellPercentInput", {
+    Title = "Smart Auto Sell Min % (Mobile)",
+    Placeholder = "-100 to 100",
+    Default = "0",
+    Callback = function(Text)
+        local num = tonumber(Text)
+        if num then
+            if num < -100 then num = -100 end
+            if num > 100 then num = 100 end
+            pcall(function()
+                local absoluteValue = num + 100
+                GetBridge("SetAutoSellMinPercent"):Fire(absoluteValue)
+            end)
+            -- Also update the slider to reflect the entered value
+            local slider = FarmTab:GetSlider("AutoSellPercentSlider")
+            if slider then slider:SetValue(num) end
+        end
+    end
 })
 
 local MarketPricesParagraph = FarmTab:AddParagraph({
