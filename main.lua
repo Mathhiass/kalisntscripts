@@ -10,6 +10,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 -- === GET BRIDGE FUNCTION ===
@@ -99,11 +100,32 @@ local ShopTab = Tabs.Shop
 local TeleportTab = Tabs.Teleport
 
 -- ==========================
--- 1. HOME TAB (STATS)
+-- 1. HOME TAB (STATS & UTILS)
 -- ==========================
 local StatsParagraph = HomeTab:AddParagraph({
     Title = "Live Server Statistics",
     Content = "Loading data..."
+})
+
+local antiAfkConnection
+HomeTab:AddToggle("AntiAfkToggle", {
+    Title = "Anti-AFK (Prevent 20min Disconnect)",
+    Default = true,
+    Callback = function(Value)
+        if Value then
+            if not antiAfkConnection then
+                antiAfkConnection = LocalPlayer.Idled:Connect(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new())
+                end)
+            end
+        else
+            if antiAfkConnection then
+                antiAfkConnection:Disconnect()
+                antiAfkConnection = nil
+            end
+        end
+    end
 })
 
 local ShopTimersParagraph = ShopTab:AddParagraph({
@@ -633,6 +655,7 @@ end)
 _G.MiniWarStop = function()
     _G.MiniWarRunning = false
     if fpsConnection then fpsConnection:Disconnect() end
+    if antiAfkConnection then antiAfkConnection:Disconnect() end
     if ScreenGui then ScreenGui:Destroy() end
     Window:Destroy()
 end
