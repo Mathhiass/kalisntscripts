@@ -545,20 +545,18 @@ local function createCaptureUI(tab, displayName, internalName)
         end
     })
     
-    if internalName ~= "KingOfTheHill" and internalName ~= "City" then
-        tab:AddDropdown("CaptureTarget_" .. internalName, {
-            Title = "Specific Target",
-            Values = {"1", "2", "3", "4", "5", "6", "Random"},
-            Multi = false,
-            Default = "1",
-            Callback = function(Value)
-                CONFIG.CAPTURE_SETTINGS[internalName].TargetIndex = Value
-                if CONFIG.CAPTURE_SETTINGS[internalName].Enabled and type(autoCapture) == "function" then
-                    task.spawn(autoCapture)
-                end
+    tab:AddDropdown("CaptureTarget_" .. internalName, {
+        Title = "Specific Target",
+        Values = {"1", "2", "3", "4", "5", "6", "Random"},
+        Multi = false,
+        Default = "1",
+        Callback = function(Value)
+            CONFIG.CAPTURE_SETTINGS[internalName].TargetIndex = Value
+            if CONFIG.CAPTURE_SETTINGS[internalName].Enabled and type(autoCapture) == "function" then
+                task.spawn(autoCapture)
             end
-        })
-    end
+        end
+    })
 end
 
 createCaptureUI(TeleportTab, "Raid Base (King of the Hill)", "KingOfTheHill")
@@ -743,74 +741,78 @@ end
 
 -- === AUTO-CAPTURE FUNCTION ===
 local lastCaptureTick = 0
+local isCapturing = false
+local captureQueued = false
 
 autoCapture = function()
-    local sentTroops = false
+    if isCapturing then
+        captureQueued = true
+        return
+    end
     
-    -- Raid Bases
-    local raidSettings = CONFIG.CAPTURE_SETTINGS["KingOfTheHill"]
-    if raidSettings.Enabled then
+    isCapturing = true
+    task.spawn(function()
+        local sentTroops = false
+        local basesByType = {}
+        
+        -- Normal Bases
+        local normalBases = CollectionService:GetTagged("CapturePoint")
+        for _, base in ipairs(normalBases) do
+            local bType = base:GetAttribute("baseType")
+            if bType then
+                if not basesByType[bType] then basesByType[bType] = {} end
+                table.insert(basesByType[bType], base)
+            end
+        end
+        
+        -- Raid Bases
         local raidBases = CollectionService:GetTagged("CapturePointKingOfTheHill")
+        if not basesByType["KingOfTheHill"] then basesByType["KingOfTheHill"] = {} end
         for _, base in ipairs(raidBases) do
-            for _, armyStr in ipairs(raidSettings.Army) do
-                local success = pcall(function()
-                    GetBridge("SendTroopsToPoint"):Fire({
-                        armyIndex = tonumber(armyStr),
-                        capturePoint = base
-                    })
-                end)
-                if success then
-                    sentTroops = true
-                    task.wait(0.5)
+            table.insert(basesByType["KingOfTheHill"], base)
+        end
+        
+        for bType, bases in pairs(basesByType) do
+            local settings = CONFIG.CAPTURE_SETTINGS[bType]
+            if settings and settings.Enabled and #bases > 0 then
+                table.sort(bases, function(a, b) return a.Name < b.Name end)
+                
+                local targetBase = nil
+                if settings.TargetIndex == "Random" then
+                    targetBase = bases[math.random(1, #bases)]
+                else
+                    local idx = tonumber(settings.TargetIndex) or 1
+                    targetBase = bases[idx] or bases[1]
                 end
-            end
-        end
-    end
-    
-    -- Normal Bases
-    local normalBases = CollectionService:GetTagged("CapturePoint")
-    local basesByType = {}
-    for _, base in ipairs(normalBases) do
-        local bType = base:GetAttribute("baseType")
-        if bType then
-            if not basesByType[bType] then basesByType[bType] = {} end
-            table.insert(basesByType[bType], base)
-        end
-    end
-    
-    for bType, bases in pairs(basesByType) do
-        local settings = CONFIG.CAPTURE_SETTINGS[bType]
-        if settings and settings.Enabled then
-            table.sort(bases, function(a, b) return a.Name < b.Name end)
-            
-            local targetBase = nil
-            if settings.TargetIndex == "Random" then
-                targetBase = bases[math.random(1, #bases)]
-            else
-                local idx = tonumber(settings.TargetIndex) or 1
-                targetBase = bases[idx] or bases[1]
-            end
-            
-            if targetBase then
-                for _, armyStr in ipairs(settings.Army) do
-                    local success = pcall(function()
-                        GetBridge("SendTroopsToPoint"):Fire({
-                            armyIndex = tonumber(armyStr),
-                            capturePoint = targetBase
-                        })
-                    end)
-                    if success then
-                        sentTroops = true
-                        task.wait(0.5)
+                
+                if targetBase then
+                    for _, armyStr in ipairs(settings.Army) do
+                        local success = pcall(function()
+                            GetBridge("SendTroopsToPoint"):Fire({
+                                armyIndex = tonumber(armyStr),
+                                capturePoint = targetBase
+                            })
+                        end)
+                        if success then
+                            sentTroops = true
+                            task.wait(0.2)
+                        end
                     end
                 end
             end
         end
-    end
-    
-    if sentTroops then
-        lastCaptureTick = tick()
-    end
+        
+        if sentTroops then
+            lastCaptureTick = tick()
+        end
+        
+        isCapturing = false
+        if captureQueued then
+            captureQueued = false
+            task.wait(1)
+            autoCapture()
+        end
+    end)
 end
 
 -- === AUTO SELL FUNCTION ===
