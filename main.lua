@@ -214,11 +214,13 @@ local AutoSellSlider = FarmTab:AddSlider("AutoSellPercentSlider", {
     end
 })
 
--- Mobile-friendly input (Textbox) for direct percentage entry
-FarmTab:AddTextbox("AutoSellPercentInput", {
+-- Mobile-friendly input for direct percentage entry
+FarmTab:AddInput("AutoSellPercentInput", {
     Title = "Smart Auto Sell Min % (Mobile)",
-    Placeholder = "-100 to 100",
     Default = "0",
+    Placeholder = "-100 to 100",
+    Numeric = true,
+    Finished = false,
     Callback = function(Text)
         local num = tonumber(Text)
         if num then
@@ -228,9 +230,7 @@ FarmTab:AddTextbox("AutoSellPercentInput", {
                 local absoluteValue = num + 100
                 GetBridge("SetAutoSellMinPercent"):Fire(absoluteValue)
             end)
-            -- Also update the slider to reflect the entered value
-            local slider = FarmTab:GetSlider("AutoSellPercentSlider")
-            if slider then slider:SetValue(num) end
+            if AutoSellSlider then AutoSellSlider:SetValue(num) end
         end
     end
 })
