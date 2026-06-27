@@ -18,6 +18,7 @@ local GetBridge = require(ReplicatedStorage.util.GetBridge)
 local BuildingsConfig = require(ReplicatedStorage.shared.config.BuildingsConfig)
 local ClientData = require(ReplicatedStorage.client.modules.ClientData)
 local ShopsConfig = require(ReplicatedStorage.shared.config.ShopsConfig)
+local GeneralsConfig = require(ReplicatedStorage.shared.config.GeneralsConfig)
 
 -- === CONFIGURATION ===
 local CONFIG = {
@@ -91,6 +92,7 @@ local Tabs = {
     Farm = Window:AddTab({ Title = "Auto Farm", Icon = "leaf" }),
     Shop = Window:AddTab({ Title = "Shop", Icon = "shopping-cart" }),
     Teleport = Window:AddTab({ Title = "Teleport", Icon = "map-pin" }),
+    Generals = Window:AddTab({ Title = "Generals", Icon = "shield" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
@@ -568,6 +570,138 @@ createCaptureUI(TeleportTab, "Military Base", "MilitaryBase")
 createCaptureUI(TeleportTab, "City", "City")
 createCaptureUI(TeleportTab, "Oil Rig", "WaterRig")
 createCaptureUI(TeleportTab, "Lab", "Lab")
+-- ==========================
+-- 5. GENERALS TAB
+-- ==========================
+local GeneralsTab = Tabs.Generals
+
+local selectedTargets = {}
+local targetRarity = "None"
+local autoRollEnabled = false
+
+local targetGeneralsList = {}
+for name, _ in pairs(GeneralsConfig.generals) do
+    table.insert(targetGeneralsList, name)
+end
+table.sort(targetGeneralsList)
+
+GeneralsTab:AddSection("Auto Roll Configuration")
+
+local TargetsDropdown = GeneralsTab:AddDropdown("TargetsDropdown", {
+    Title = "Preferred Target Generals",
+    Values = targetGeneralsList,
+    Multi = true,
+    Default = {},
+    Callback = function(Options)
+        selectedTargets = {}
+        for name, isSelected in pairs(Options) do
+            if isSelected then
+                selectedTargets[name] = true
+            end
+        end
+    end
+})
+
+local RarityDropdown = GeneralsTab:AddDropdown("RarityDropdown", {
+    Title = "Minimum Target Rarity",
+    Values = {"None", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"},
+    Multi = false,
+    Default = "None",
+    Callback = function(Value)
+        targetRarity = Value
+    end
+})
+
+local RollStatusParagraph = GeneralsTab:AddParagraph({
+    Title = "Auto Roll Status",
+    Content = "Idle"
+})
+
+local AutoRollToggle
+AutoRollToggle = GeneralsTab:AddToggle("AutoRollToggle", {
+    Title = "Auto Roll (Uses Gems)",
+    Default = false,
+    Callback = function(Value)
+        autoRollEnabled = Value
+        if Value then
+            task.spawn(function()
+                while autoRollEnabled and _G.MiniWarRunning do
+                    local state = ClientData.playerProducer:getState().player
+                    local gems = state.gems or 0
+                    local cost = GeneralsConfig.gemRollCost or 125
+                    
+                    if next(selectedTargets) == nil and targetRarity == "None" then
+                        RollStatusParagraph:SetDesc("Please select target generals or a minimum rarity.")
+                        task.wait(1)
+                        continue
+                    end
+                    
+                    if gems < cost then
+                        RollStatusParagraph:SetDesc("Not enough gems! Stopping Auto Roll.")
+                        autoRollEnabled = false
+                        AutoRollToggle:SetValue(false)
+                        break
+                    end
+                    
+                    RollStatusParagraph:SetDesc("Rolling...")
+                    
+                    local rolledKey = nil
+                    local rolledRarity = nil
+                    local signalReceived = false
+                    
+                    local conn
+                    conn = GetBridge("GeneralRollResult"):Connect(function(result)
+                        rolledKey = result.generalKey
+                        rolledRarity = result.rarity
+                        signalReceived = true
+                    end)
+                    
+                    GetBridge("GeneralGemRoll"):Fire()
+                    
+                    local start = tick()
+                    while not signalReceived and (tick() - start) < 5 and autoRollEnabled do
+                        task.wait(0.1)
+                    end
+                    
+                    if conn then conn:Disconnect() end
+                    
+                    if not signalReceived then
+                        RollStatusParagraph:SetDesc("Roll timed out or stopped.")
+                        task.wait(1)
+                        continue
+                    end
+                    
+                    local displayRarity = rolledRarity or "Unknown"
+                    RollStatusParagraph:SetDesc("Last Rolled: " .. tostring(rolledKey) .. " (" .. displayRarity .. ")")
+                    
+                    -- Check matches
+                    local matches = false
+                    if selectedTargets[rolledKey] then
+                        matches = true
+                    end
+                    
+                    if targetRarity ~= "None" then
+                        local rarityOrder = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"}
+                        local targetIdx = table.find(rarityOrder, targetRarity) or 0
+                        local rolledIdx = table.find(rarityOrder, rolledRarity) or 0
+                        if rolledIdx >= targetIdx then
+                            matches = true
+                        end
+                    end
+                    
+                    if matches then
+                        RollStatusParagraph:SetDesc("SUCCESS! Got target: " .. tostring(rolledKey) .. "! Stopping Auto Roll.")
+                        autoRollEnabled = false
+                        AutoRollToggle:SetValue(false)
+                        break
+                    end
+                    
+                    task.wait(0.8) -- delay between rolls
+                end
+            end)
+        end
+    end
+})
 
 -- === CONFIGURATION SAVING ===
 SaveManager:SetLibrary(Fluent)
